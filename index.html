@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Form Registrasi</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/blazeface"></script>
+  <style>
+    body {
+      font-family: 'Poppins', sans-serif;
+      background: linear-gradient(135deg, #74ebd5, #acb6e5);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+    }
+
+    .container {
+      background: #ffffff;
+      padding: 30px;
+      border-radius: 15px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+      width: 100%;
+      max-width: 400px;
+    }
+
+    h2 {
+      text-align: center;
+      color: #333;
+      font-size: 28px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: bold;
+      color: #555;
+    }
+
+    input[type="text"], input[type="password"], input[type="file"] {
+      width: 100%;
+      padding: 12px;
+      margin-bottom: 15px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      box-sizing: border-box;
+      font-size: 14px;
+      background: #f8f9fa;
+      transition: 0.3s ease;
+    }
+
+    input:focus {
+      border-color: #74ebd5;
+      outline: none;
+      box-shadow: 0 0 5px #74ebd5;
+    }
+
+    #faceWarning {
+      color: #ff4c4c;
+      text-align: center;
+      display: none;
+      font-weight: bold;
+    }
+
+    button {
+      width: 100%;
+      background: #4CAF50;
+      color: white;
+      border: none;
+      padding: 14px;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: background 0.3s ease, transform 0.2s ease;
+    }
+
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+
+    button:hover:not(:disabled) {
+      background: #45a049;
+      transform: scale(1.02);
+    }
+
+    #faceCanvas {
+      display: none;
+      margin: 10px auto;
+      border-radius: 8px;
+      width: 150px;
+      height: 150px;
+      object-fit: cover;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Form Registrasi</h2>
+    <form id="registerForm" onsubmit="return validateForm(event)">
+      <label for="name">Nama:</label>
+      <input type="text" id="name" name="name" required oninput="formatName()">
+
+      <label for="username">Username:</label>
+      <input type="text" id="username" name="username" required oninput="validateUsername()">
+
+      <label for="password">Password:</label>
+      <input type="password" id="password" name="password" required>
+
+      <label for="whatsapp">WhatsApp:</label>
+      <input type="text" id="whatsapp" name="whatsapp" required oninput="formatWhatsApp()">
+
+      <label for="image">Image Profil (JPG, 50-500 kB):</label>
+      <input type="file" id="image" name="image" accept=".jpg,.jpeg" required onchange="validateImage()">
+
+      <canvas id="faceCanvas"></canvas>
+      <p id="faceWarning">Muka tidak terdeteksi, silahkan pakai gambar JPG lainnya!</p>
+
+      <button type="submit" id="registerButton" disabled>Register</button>
+    </form>
+  </div>
+
+  <script>
+    function formatName() {
+      const nameInput = document.getElementById('name');
+      let name = nameInput.value;
+
+      name = name.replace(/[^a-zA-Z\s]/g, '')
+        .toLowerCase()
+        .split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+
+      nameInput.value = name;
+    }
+
+    function validateUsername() {
+      const usernameInput = document.getElementById('username');
+      usernameInput.value = usernameInput.value.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 20);
+    }
+
+    function formatWhatsApp() {
+      const waInput = document.getElementById('whatsapp');
+      let wa = waInput.value;
+
+      if (wa.startsWith('0')) {
+        wa = '62' + wa.slice(1);
+      }
+
+      wa = wa.replace(/[^0-9]/g, '').slice(0, 14);
+      waInput.value = wa;
+    }
+
+    async function validateImage() {
+      const imageInput = document.getElementById('image');
+      const file = imageInput.files[0];
+
+      if (!file) return;
+
+      const fileSizeKB = file.size / 1024;
+      const fileType = file.type;
+
+      if (fileType !== 'image/jpeg') {
+        alert('File gambar harus berformat JPG');
+        resetImageValidation();
+        return;
+      }
+
+      if (fileSizeKB < 50 || fileSizeKB > 500) {
+        alert('Ukuran gambar harus antara 50-500 kB');
+        resetImageValidation();
+        return;
+      }
+
+      detectFace(file);
+    }
+
+    function resetImageValidation() {
+      document.getElementById('registerButton').disabled = true;
+      document.getElementById('faceWarning').style.display = 'none';
+      const canvas = document.getElementById('faceCanvas');
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    async function detectFace(file) {
+      const img = new Image();
+      const reader = new FileReader();
+
+      reader.onload = async function(e) {
+        img.src = e.target.result;
+
+        img.onload = async function() {
+          const canvas = document.getElementById('faceCanvas');
+          const ctx = canvas.getContext('2d');
+
+          canvas.width = 150;
+          canvas.height = 150;
+          ctx.drawImage(img, 0, 0, 150, 150);
+
+          const model = await blazeface.load();
+          const predictions = await model.estimateFaces(canvas, false);
+
+          ctx.strokeStyle = predictions.length > 0 ? 'green' : 'red';
+          ctx.lineWidth = 2;
+
+          if (predictions.length > 0) {
+            const face = predictions[0];
+            const [x, y] = face.topLeft;
+            const [x2, y2] = face.bottomRight;
+
+            ctx.strokeRect(x, y, x2 - x, y2 - y);
+
+            document.getElementById('registerButton').disabled = false;
+            document.getElementById('faceWarning').style.display = 'none';
+          } else {
+            document.getElementById('registerButton').disabled = true;
+            document.getElementById('faceWarning').style.display = 'block';
+          }
+
+          canvas.style.display = 'block';
+        };
+      };
+
+      reader.readAsDataURL(file);
+    }
+
+    function validateForm(event) {
+      const password = document.getElementById('password').value;
+      const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{6,20}$/;
+
+      if (!passwordRegex.test(password)) {
+        alert('Password harus mengandung huruf besar, kecil, angka, karakter spesial, dan panjang 6-20 karakter');
+        return false;
+      }
+
+      alert('Form berhasil disubmit!');
+      return true;
+    }
+  </script>
+</body>
+</html>
